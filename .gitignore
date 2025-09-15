@@ -1,0 +1,42 @@
+# ---- CLion / JetBrains IDE ----
+.idea/
+*.iml
+
+# ---- CMake build directories ----
+cmake-build-*/
+build/
+
+# ---- Compiled binaries ----
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.a
+*.lib
+
+# ---- Logs / Debug ----
+*.log
+*.trace
+*.tmp
+
+# ---- OS-specific files ----
+.DS_Store
+Thumbs.db
+
+# ---- CMake generated files ----
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+Testing/
+CTestTestfile.cmake
+
+# ---- Packaging ----
+*.tar.gz
+*.zip
+*.7z
