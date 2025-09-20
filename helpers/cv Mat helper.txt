@@ -1,0 +1,29 @@
+cv:: Mat name; // has 0 size by default
+cv::Mat name(cols, rows, pixelType, color)
+//  examples of pixelType
+//  - CV_8U or CV8UC3
+//      U : means unsigned (S is signed)
+//      C3: means 3 channel (grayscale if not given)
+//  examples of color
+//  - 0-255 if grayscale matrix element
+//  - can be cv::Scalar(255, 255, 255) BRG by default
+
+// copying
+image1.copyTo(image2);
+cv::Mat image3 = image1.clone();
+
+// converting
+cv::Mat image1, image2;
+image1 = cv::imread("data/test.jpg", CV_LOAD_IMAGE_GRAYSCALE);
+image1.convertTo( image2, CV_32F, 1/255.0, 0.0); // to floating point image
+// ! must have the same number of channels
+
+// small operations
+cv::Matx33d matrix(
+    3.0, 2.0, 1.0,
+    3.0, 2.0, 1.0,
+    3.0, 2.0, 1.0,
+    3.0, 2.0, 1.0);
+cv::Matx31d vector(
+    3.0, 2.0, 1.0);
+cv::Matx31d result = matrix * vector;

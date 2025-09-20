@@ -1,0 +1,1338 @@
+// Multiple subdirs  ########################
+Top-level CMakeLists.txt:
+project(MyOpenCVProject)
+add_subdirectory(src)
+# optionally add_subdirectory(tests)
+
+src/CMakeLists.txt:
+find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui imgcodecs videoio)
+add_library(mycvlib image_utils.cpp processing.cpp)
+target_include_directories(mycvlib PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(mycvlib PUBLIC ${OpenCV_LIBS})
+
+add_executable(app main.cpp)
+target_link_libraries(app PRIVATE mycvlib)
+
+// Running from Terminal ####################
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+cmake --build . -- -j$(nproc)
+./app    # run from build dir; working dir is build by default
+
+
+// Cheat Sheet ###############################
+I/O
+
+cv::Mat img = cv::imread(path, cv::IMREAD_COLOR | cv::IMREAD_UNCHANGED): read image
+
+cv::imwrite(path, img): save image
+
+cv::VideoCapture cap(device_or_path); cap.isOpened(); cap >> frame;
+
+cv::VideoWriter writer(path, fourcc, fps, SizeW,H);
+
+Display & GUI
+
+cv::namedWindow("win", cv::WINDOW_NORMAL /* or WINDOW_AUTOSIZE */);
+
+cv::imshow("win", img); cv::waitKey(ms); cv::destroyAllWindows();
+
+Color & geometry
+
+cv::cvtColor(src, dst, cv::COLOR_BGR2GRAY);
+
+cv::resize(src, dst, dsize, fx, fy, cv::INTER_LINEAR);
+
+cv::warpAffine, cv::warpPerspective, cv::getRotationMatrix2D, cv::getPerspectiveTransform
+
+Filters & blur
+
+cv::blur, cv::GaussianBlur, cv::medianBlur, cv::bilateralFilter
+
+Edge / gradient
+
+cv::Sobel, cv::Laplacian, cv::Canny
+
+Threshold / morphology
+
+cv::threshold(src, dst, thresh, maxval, cv::THRESH_BINARY)
+
+cv::morphologyEx(src, dst, cv::MORPH_OPEN/_CLOSE/...)
+
+Contours & shapes
+
+cv::findContours, cv::drawContours, cv::approxPolyDP, cv::boundingRect
+
+Features & matching
+
+cv::ORB, cv::BFMatcher, cv::FlannBasedMatcher, cv::SIFT (SIFT may require contrib / nonfree)
+
+Useful Mat APIs
+
+img.rows, img.cols, img.channels(), img.type() -> decode with CV_8UC3 etc.
+
+img.at<uchar>(y,x) for single-channel; img.at<cv::Vec3b>(y,x) for 3-channel 8-bit
+
+img.ptr<uchar>(row) for raw pointer iteration (faster in loops)
+
+img.clone() for deep copy; cv::Mat m2 = m1; is a shallow copy (header only — they share data).
+
+Types
+
+CV_<bitdepth>U|S|F C<num_channels> e.g. CV_8UC3, CV_32FC1.
+
+// cv::Mat ##################################
+cv::Mat
+ ├─ rows = 480
+ ├─ cols = 640
+ ├─ type = CV_8UC3   # 8-bit unsigned, 3 channels (BGR)
+ ├─ step = 1920      # bytes per row
+ ├─ data = 0x7fa43... (pointer to pixel array)
+ └─ refcount = shared_ptr<int>
+
+- clonning an image
+>>cv::Mat c = a.clone(); // deep copy
+
+- Region of Interest ROI
+# slicing an image
+>>cv::Mat img = cv::imread("data/test.jpg");
+>>cv::Rec roi(50, 50, 100, 100) // x, y, width, height
+>>cv::Mat cropped = img(roi); // shallow view (same data buffer shared new headers)
+>>cv:Mat deep = img(roi).clone(); // new data memory allocation
+
+
+- Acessing pixels
+# using .at<> slower but safer
+>>cv::Mat gray = cv:: imread("data/test.jpg", cv::IMREAD_GRAYSCALE);
+>>uchar val = gray.at<uchar>(10, 20); // x = 10, y = 20
+>>gray.at<unchar>(10,20) = 255; // setting pixel to white
+
+cv::Mat color = cv::imread("data/test.jpg");
+cv::Vec3b pixel = color.at<cv::Vec3b>(10,20); // 3 channel uchar
+uchar blue = pixel[0];
+uchar green = pixel[1];
+uchar red = pixel[2];
+
+# using pointer arithmetics
+// .ptr<> usefull when iterating and avoids checking bounderies
+for(int y = 0; y < img.rows; y++) {
+    uchar* rowPtr = img.ptr<uchar>(y);
+    for(int x = 0; x < img.cols; x++) {
+        uchar b = rowPtr[x*3 + 0];
+        uchar g = rowPtr[x*3 + 1];
+        uchar r = rowPtr[x*3 + 2];
+    }
+}
+
+important ! always check img.isContinuous()
+- after roi or transposing imread images might become non continous
+if (img.isContinuous()) {
+    int totalBytes = img.total() * img.elemSize();
+    uchar* p = img.ptr<uchar>(0); // single ptr to whole data
+}
+
+
+- Creating manual cv::Mat
+cv::Mat zeros = cv::Mat::zeros(480, 640, CV_8UC3) // blck img
+cv::Mat ones = cv::Mat::ones(100, 100, CV_32F); // filled with 1.0
+cv::Mat eye = cv::Mat::eye(3, 3, CV_64F); // identity matrix
+
+cv::Mat custom(2, 3, CV_8UC1, cv::Scalar(128)); // 2x3 gray filled with 128
+
+- type codes
+std::string type2str(int type) {
+    std::string r;
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+    switch ( depth ) {
+        case CV_8U:  r = "8U"; break;
+        case CV_8S:  r = "8S"; break;
+        case CV_16U: r = "16U"; break;
+        case CV_16S: r = "16S"; break;
+        case CV_32S: r = "32S"; break;
+        case CV_32F: r = "32F"; break;
+        case CV_64F: r = "64F"; break;
+        default:     r = "User"; break;
+    }
+    r += "C"; r += std::to_string(chans);
+    return r;
+}
+
+- painting an roi
+sub.setTo(cv::Scalar(0,0,255)); // painting to red
+
+
+- inverting colors
+#using .at<>
+for (int y = 0; y < img.rows; y++) {
+    for (int x = 0; x < img.cols; x++) {
+        cv::Vec3b &pixel = img.at<cv::Vec3b>(y,x);
+        pixel[0] = 255 - pixel[0]; // invert B
+        pixel[1] = 255 - pixel[1]; // invert G
+        pixel[2] = 255 - pixel[2]; // invert R
+    }
+}
+
+#using .ptr<> faster and works even if not continuous
+for (int y = 0; y < img.rows; y++) {
+    uchar* rowPtr = img.ptr<uchar>(y);
+    for (int x = 0; x < img.cols * img.channels (); x++) {
+        rowPtr[x] = 255 - rowPtr[x];
+    }
+}
+
+- custom M
+cv::Mat m(5, 5, CV_32F, cv::Scalar(3.14));
+std::cout << m << "\n";
+
+
+// Image I/O ###############################
+cv::imread(path, flag)
+- flags: how to interpret image:
+cv::IMREAD_COLOR (default): 3-channel BGR (8UC3).
+cv::IMREAD_GRAYSCALE: 1-channel gray (8UC1).
+cv::IMREAD_UNCHANGED: keep alpha if present (e.g., PNG RGBA → 8UC4).
+cv::IMREAD_REDUCED_COLOR_2 / _4 / _8: downsample while loading
+
+cv::imwrite("output.png", img);
+# Supports many formats: PNG, JPG, TIFF, BMP, etc.
+
+- compressing the output
+std::vector<int> params = {cv::IMWRITEJPEGQUALITY, 90} // 0-100
+cv::imwrite("out.jpg", img, params);
+
+cv::imshow("window name", img);
+cv::waitKey(0); // wait indef > 0 wait that many ms
+
+- Video capturing
+cv::VideoCapture cap("video.mp4"); // file
+// or
+cv::VideoCapture cap(0); // Webcam index
+
+if (!cap.isOpened()) {
+    std::cerr << "Error opening video\n";
+    return -1;
+}
+
+cv::Mat frame;
+while (true) {
+    cap >> frame; // grab next frame
+    if (frame.empty()) break;
+    cv::imshow("Video", frame);
+    if (cv::waitKey(30) == 27 break;
+}
+
+- Video output
+cv::VideoWriter writer (
+    "out.avi",
+    cv::VideoWriter::fourcc('M', 'J', 'P', 'G'),
+    30,
+    cv::Size(frame.cols, frame.rows) // resolution
+);
+
+if (!writer.isOpen()) {
+    std::cerr << "Could not open writer\n";
+    return -1;
+}
+
+writer.write(frame); // inside loop
+
+#Common codecs:
+
+MJPG → 'M','J','P','G'
+
+XVID → 'X','V','I','D'
+
+H264 → 'X','2','6','4' (requires build with FFmpeg support).
+
+
+- Autosized window
+cv::namedWindow("win",cv::WINDOW_NORMAL);
+cv::resizeWindow("win", 640, 480);
+
+
+## Workflows
+cv::Mat img = cv::imread("in.png");
+if (img.empty()) return -1;
+process(img);
+cv::imwrite("out.png", img);
+
+cv::VideoCapture cap("in.mp4");
+cv::VideoWriter out("out.avi", cv::VideoWriter::fourcc('M','J','P','G'), 30, cv::Size(w,h));
+cv::Mat frame;
+while (cap.read(frame)) {
+    process(frame);
+    out.write(frame);
+    cv::imshow("win", frame);
+    if (cv::waitKey(1) == 27) break;
+}
+
+// Color Spaces & Conversions ########################
+
+- Grayscale conversion
+cv::Mat gray;
+cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+- HSV conversion
+cv::Mat hsv;
+cv::cvtColor(img, hsv, cv::COLOR_BGR2HSV);
+Hue (H): color type (0–179 in OpenCV, not 0–360).
+
+Saturation (S): color intensity (0–255).
+
+Value (V): brightness (0–255).
+
+
+#detecting red areas
+cv::inRange(hsv, cv::Scalar(0, 120, 70), cv::Scalar(10, 255, 255), mask1);
+cv::inRange(hsv, cv::Scalar(170, 120, 70), cv::Scalar(180, 255, 255), mask2);
+cv::Mat mask = mask1 | mask2;
+
+- Lab color space
+cv::Mat lab;
+cv::cvtColor(img, lab, cv::COLOR_BRG2Lab);
+L = lightness
+
+a = green–red axis
+
+b = blue–yellow axis
+
+- Splitting/Merging channels
+std::vector<cv::Mat> channels;
+cv::split(img, channels); // channels[0]=B, [1]=G, [2]=R
+
+cv::imshow("Blue", channels[0]);
+cv::imshow("Green", channels[1]);
+cv::imshow("Red", channels[2]);
+
+cv::Mat merged;
+cv::merge(channels, merged);
+
+- Conversion
+cv::COLOR_BGR2GRAY
+cv::COLOR_BGR2HSV
+cv::COLOR_BGR2Lab
+cv::COLOR_BGR2RGB
+cv::COLOR_BGR2YCrCb
+
+#Extra red obj
+cv::Mat img = cv::imread("test.jpg");
+cv::Mat hsv;
+cv::cvtColor(img, hsv, cv::COLOR_BGR2HSV);
+
+cv::Mat mask1, mask2;
+cv::inRange(hsv, cv::Scalar(0,120,70), cv::Scalar(10,255,255), mask1);
+cv::inRange(hsv, cv::Scalar(170,120,70), cv::Scalar(180,255,255), mask2);
+cv::Mat mask = mask1 | mask2;
+
+cv::Mat red;
+cv::bitwise_and(img, img, red, mask);
+cv::imshow("Red Objects", red);
+cv::waitKey();
+
+
+// Processing Basics ###############################################
+- Blurring noice reduction
+cv::GaussianBlur(img, dst, cv::Size(5,5), 0);
+
+Mean blur: cv::blur(img, dst, ksize) → simple average.
+
+Gaussian blur: weighted average (normal distribution).
+
+Median blur: cv::medianBlur(img, dst, ksize) → removes salt-and-pepper noise.
+
+Bilateral filter: cv::bilateralFilter(img, dst, 9, 75, 75) → smooths while keeping edges.
+
+- Thresholding  turning grayscale to binary (black/white)
+cv::threshold(gray, dst, 127, 255, cv::THRESH_BINARY);
+Params:
+
+gray → input (must be single channel).
+
+127 → threshold value.
+
+255 → max value.
+
+THRESH_BINARY, THRESH_BINARY_INV, THRESH_TRUNC, etc.
+
+cv::adaptiveThreshold(gray, dst, 255,
+                      cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+                      cv::THRESH_BINARY, 11, 2);
+
+- Edge detection Canny
+cv::Canny(gray, edges, 100, 200);
+Finds strong + weak edges.
+
+Two thresholds:
+
+100 = lower bound
+
+200 = upper bound
+
+👉 Tiny trick: Apply Gaussian blur before Canny to reduce noise.
+
+
+- Morpho operation on binary images after threasholding
+cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5,5));
+cv::erode(bin, eroded, kernel);
+cv::dilate(bin, dilated, kernel);
+
+Erode → shrinks white regions (removes small noise).
+
+Dilate → expands white regions (fills holes).
+
+Opening = erosion → dilation (remove noise).
+
+Closing = dilation → erosion (fill gaps).
+
+👉 Tiny trick: Kernel shape (RECT, ELLIPSE, CROSS) changes behavior.
+
+- Summary
+#processing example (reduced noice -> edge extracted)
+cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+cv::GaussianBlur(gray, blur, cv::Size(5,5), 0);
+cv::Canny(blur, edges, 100, 200);
+
+// Contours & Shapes ###############################################
+- Contours Basics
+std::vector<std::vector<cv::Point>> contours;
+std::vector<cv::Vec4i> hierarchy;
+
+cv::findContours(binary, contours, hierarchy,
+                 cv::RETR_EXTERNAL,   // only outer contours
+                 cv::CHAIN_APPROX_SIMPLE); // compress horizontal/vertical segments
+
+Input must be binary image (from threshold() or Canny()).
+
+contours: vector of point-vectors (vector<vector<Point>>).
+
+hierarchy: describes nested contours (holes inside objects).
+
+👉 Tiny trick: Always preprocess first (gray → blur → threshold/Canny). Raw color
+images don’t work.
+
+- Drawing Contours
+cv::Mat drawing = cv::Mat::zeros(binary.size(), CV_8UC3);
+for (size_t i = 0; i < contours.size(); i++) {
+    cv::drawContours(drawing, contours, (int)i,
+                     cv::Scalar(0, 255, 0), 2);
+}
+cv::imshow("Contours", drawing);
+
+-1 instead of i → draw all contours at once.
+
+- Contour properties
+
+  Area
+
+  double area = cv::contourArea(contours[i]);
+
+
+  Perimeter (arc length)
+
+  double peri = cv::arcLength(contours[i], true);
+
+
+  Bounding box
+
+  cv::Rect box = cv::boundingRect(contours[i]);
+  cv::rectangle(img, box, cv::Scalar(255,0,0), 2);
+  Rotated bounding box
+
+  cv::RotatedRect rbox = cv::minAreaRect(contours[i]);
+  cv::Point2f pts[4]; rbox.points(pts);
+  for (int j=0; j<4; j++)
+      cv::line(img, pts[j], pts[(j+1)%4], cv::Scalar(0,255,0), 2);
+
+
+  Convex hull
+
+  std::vector<cv::Point> hull;
+  cv::convexHull(contours[i], hull);
+  cv::drawContours(img, std::vector<std::vector<cv::Point>>{hull}, -1,
+                   cv::Scalar(0,0,255), 2);
+
+
+  👉 Tiny trick: Small noisy contours can be filtered by if (area > some_threshold).
+
+- Polygon approximation
+std::vector<cv::Point> approx;
+cv::approxPolyDP(contours[i], approx, 0.02*peri, true);
+
+if (approx.size() == 3) { std::cout << "Triangle\n"; }
+if (approx.size() == 4) { std::cout << "Rectangle\n"; }
+Tiny trick: The epsilon parameter (0.02*peri) controls how much simplification occurs.
+
+- Moments (center of mass) for tracking
+cv::Moments M = cv::moments(contours[i]);
+int cx = (int)(M.m10 / M.m00);
+int cy = (int)(M.m01 / M.m00);
+cv::circle(img, cv::Point(cx, cy), 5, cv::Scalar(0,0,255), -1);
+
+- Hierarchy & nested contours
+cv::RETR_TREE gives you parent/child contour info. Example: donut →
+ outer contour (dough) + inner contour (hole).
+
+cv::findContours(binary, contours, hierarchy,
+                 cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+
+
+👉 Tiny trick: hierarchy[i][3] = parent contour index, -1 if none.
+
+#workflow example
+cv::Mat gray, binary;
+cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+cv::GaussianBlur(gray, gray, cv::Size(5,5), 0);
+cv::Canny(gray, binary, 100, 200);
+
+std::vector<std::vector<cv::Point>> contours;
+cv::findContours(binary, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+for (size_t i=0; i<contours.size(); i++) {
+    double area = cv::contourArea(contours[i]);
+    if (area < 100) continue; // filter noise
+
+    cv::Rect box = cv::boundingRect(contours[i]);
+    cv::rectangle(img, box, cv::Scalar(0,255,0), 2);
+
+    cv::Moments M = cv::moments(contours[i]);
+    int cx = int(M.m10/M.m00);
+    int cy = int(M.m01/M.m00);
+    cv::circle(img, {cx,cy}, 4, cv::Scalar(0,0,255), -1);
+}
+cv::imshow("Detected Objects", img);
+
+
+// Geometric Transformations #######################################
+- Translation
+Move an image by (tx, ty) pixels.
+
+cv::Mat translated;
+cv::Mat M = (cv::Mat_<double>(2,3) << 1, 0, 50, 0, 1, 30); // x+50, y+30
+cv::warpAffine(img, translated, M, img.size());
+
+
+👉 Tiny trick: warpAffine fills new areas with black by default.
+
+- Scale
+cv::Mat small, large;
+cv::resize(img, small, cv::Size(), 0.5, 0.5, cv::INTER_LINEAR);
+cv::resize(img, large, cv::Size(800,600), 0, 0, cv::INTER_CUBIC);
+Interpolation methods:
+
+INTER_NEAREST (fast, blocky)
+
+INTER_LINEAR (default, good balance)
+
+INTER_CUBIC (slower, smoother)
+
+INTER_AREA (best for shrinking)
+
+👉 Tiny trick: Use INTER_AREA for downsampling to avoid aliasing.
+
+- Rotate
+3. Rotation
+cv::Point2f center(img.cols/2.0, img.rows/2.0);
+cv::Mat R = cv::getRotationMatrix2D(center, 45, 1.0); // 45°, scale=1
+cv::Mat rotated;
+cv::warpAffine(img, rotated, R, img.size());
+
+
+Rotate around arbitrary point.
+
+Scale factor can zoom in/out at same time.
+
+👉 Tiny trick: Rotation may crop corners. Use larger output size if you want full rotated image.
+
+- Flipping
+cv::Mat flipped;
+cv::flip(img, flipped, 0);  // 0 = x-axis
+cv::flip(img, flipped, 1);  // 1 = y-axis
+cv::flip(img, flipped, -1); // both axes
+👉 Common in data augmentation (left-right mirror for faces, digits, etc.).
+
+- Affine Transformation
+cv::Point2f src[3] = { {0,0}, {img.cols-1,0}, {0,img.rows-1} };
+cv::Point2f dst[3] = { {50,50}, {img.cols-100,50}, {100,img.rows-50} };
+
+cv::Mat M = cv::getAffineTransform(src, dst);
+cv::Mat warped;
+cv::warpAffine(img, warped, M, img.size());
+
+- Perspective transform
+Use 4 points to warp a quadrilateral → rectangle (useful for “document scanner” effect).
+
+cv::Point2f srcPts[4] = { {56,65}, {368,52}, {28,387}, {389,390} };
+cv::Point2f dstPts[4] = { {0,0}, {300,0}, {0,400}, {300,400} };
+
+cv::Mat M = cv::getPerspectiveTransform(srcPts, dstPts);
+cv::Mat warped;
+cv::warpPerspective(img, warped, M, cv::Size(300,400));
+
+
+👉 Tiny trick: Good for correcting tilted photos of papers, screens, etc.
+
+// Drawing & Annotation ############################################
+- line
+cv::line(img, cv::Point(50,50), cv::Point(200,50),
+         cv::Scalar(0,255,0), 2);
+(50,50) → start point.
+
+(200,50) → end point.
+
+Scalar(0,255,0) → color (BGR).
+
+2 → thickness.
+
+👉 Tiny trick: Thickness = -1 means “fill shape” (applies to rectangles, circles,
+ polygons).
+
+- Rectangle
+cv::rectangle(img, cv::Point(100,100), cv::Point(300,200),
+              cv::Scalar(255,0,0), 3);
+Draws bounding boxes (common for object detection).
+
+If thickness=-1 → filled rectangle.
+
+- circle
+cv::circle(img, cv::Point(250,250), 50,
+           cv::Scalar(0,0,255), -1);
+Center = (250,250).
+
+Radius = 50.
+
+Red filled circle.
+
+- Ellipse
+cv::ellipse(img, cv::Point(250,250),
+            cv::Size(100,50), // axes
+            45, 0, 360,       // rotation + angle range
+            cv::Scalar(0,255,255), 2);
+👉 Good for fitting shapes around objects.
+
+- Polylines
+std::vector<cv::Point> pts = { {100,200}, {200,250}, {300,200}, {250,100} };
+cv::polylines(img, pts, true, cv::Scalar(255,255,0), 2);
+true → closed polygon.
+
+false → open polyline.
+
+👉 Used to draw contour approximations
+
+- Text
+cv::putText(img, "Hello OpenCV",
+            cv::Point(50,50à, cv::FONT_HERSHEY_SIMPLEX,
+            1.0, cv;;Scalar(255,255,255), 2);
+"Hello OpenCV" = text.
+
+(50,50) = bottom-left corner of text.
+
+1.0 = scale.
+
+Scalar = color.
+
+2 = thickness.
+
+👉 Tiny trick: Fonts available: FONT_HERSHEY_SIMPLEX, FONT_HERSHEY_PLAIN,
+ FONT_HERSHEY_DUPLEX, etc.
+
+- Combo
+You can layer multiple annotations:
+
+Rectangle = bounding box.
+
+Text = class label.
+
+Circle = center.
+
+Typical in object detection:
+
+cv::rectangle(img, box, cv::Scalar(0,255,0), 2);
+cv::putText(img, "Object", cv::Point(box.x, box.y-10),
+            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0,255,0), 2);
+
+
+- Transparency & overlays
+To draw semi-transparent overlays (e.g. masks):
+
+cv::Mat overlay;
+img.copyTo(overlay);
+cv::rectangle(overlay, cv::Point(50,50), cv::Point(300,200),
+              cv::Scalar(0,0,255), -1);
+cv::addWeighted(overlay, 0.4, img, 0.6, 0, img);
+
+
+👉 Creates a red transparent rectangle.
+
+// Video Processing ################################################
+
+- Reading from file
+cv::VideoCapture cap("video.mp4");
+if (!cap.isOpened()) {
+    std::cerr << "Error opening video file\n";
+    return -1;
+}
+
+cv::Mat frame;
+while (true) {
+    cap >> frame;  // read next frame
+    if (frame.empty()) break; // end of video
+
+    cv::imshow("Video", frame);
+    if (cv::waitKey(25) == 27) break; // stop on ESC
+}
+cap.release();
+cv::destroyAllWindows();
+
+cap >> frame; works like reading from a stream.
+👉 Always check for .empty() to detect end-of-video.
+
+- Reading from webcam
+
+cv::VideoCapture cap(0); // 0 = default camera
+if (!cap.isOpened()) return -1;
+
+while (true) {
+    cv::Mat frame;
+    cap >> frame;
+    if (frame.empty()) break;
+
+    cv::imshow("Webcam", frame);
+    if (cv::waitKey(1) == 27) break;
+}
+👉 Argument 0 = first camera, 1 = second camera, etc.
+
+- Writing video to fill
+cv::VideoCapture cap(0);
+cv::VideoWriter writer("output.avi",
+    cv::VideoWriter::fourcc('M','J','P','G'),
+    30, cv::Size(640,480));
+
+cv::Mat frame;
+while (true) {
+    cap >> frame;
+    if (frame.empty()) break;
+
+    writer.write(frame);          // save frame
+    cv::imshow("Recording", frame);
+
+    if (cv::waitKey(1) == 27) break;
+}
+cap.release();
+writer.release();
+
+fourcc defines codec (common ones: MJPG, XVID, MP4V).
+👉 Must specify correct frame size & FPS.
+
+- Processing video frame by frame
+Each frame = just an image → you can apply everything we learned so far.
+
+Example: convert each frame to grayscale:
+
+while (true) {
+    cap >> frame;
+    if (frame.empty()) break;
+
+    cv::Mat gray;
+    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+
+    cv::imshow("Gray Video", gray);
+    if (cv::waitKey(1) == 27) break;
+}
+
+- Obj detection (motion detection)
+Detect moving objects with frame differencing:
+
+cv::Mat prev, frame, diff, gray;
+cap >> prev;
+cv::cvtColor(prev, prev, cv::COLOR_BGR2GRAY);
+
+while (true) {
+    cap >> frame;
+    if (frame.empty()) break;
+
+    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    cv::absdiff(prev, gray, diff);
+    cv::threshold(diff, diff, 30, 255, cv::THRESH_BINARY);
+
+    cv::imshow("Motion", diff);
+    prev = gray.clone();
+
+    if (cv::waitKey(30) == 27) break;
+}
+
+
+👉 This detects “what’s changed” between frames.
+
+- Frame rate control
+cv::waitKey(ms) sets delay between frames.
+
+For live camera, use waitKey(1) or waitKey(10).
+
+For video file, use waitKey(1000/fps) to match real speed.
+
+// Object detection & tracking #####################################
+- obj detection with color
+We can use HSV color filtering:
+
+cv::Mat hsv, mask;
+cv::cvtColor(frame, hsv, cv::COLOR_BGR2HSV);
+
+// Range for red color
+cv::Scalar lower(0,120,70);
+cv::Scalar upper(10,255,255);
+cv::inRange(hsv, lower, upper, mask);
+
+// Show mask
+cv::imshow("Mask", mask);
+
+
+👉 Tiny trick: Always convert to HSV — it’s more robust
+than BGR for color detection.
+
+- Obj detection with motion
+Background subtraction:
+
+cv::Ptr<cv::BackgroundSubtractor> fgbg = cv::createBackgroundSubtractorMOG2();
+cv::Mat fgmask;
+
+while (true) {
+    cap >> frame;
+    if (frame.empty()) break;
+
+    fgbg->apply(frame, fgmask);
+
+    cv::imshow("Foreground", fgmask);
+    if (cv::waitKey(30) == 27) break;
+}
+
+
+👉 Separates moving foreground objects from static background.
+
+- Detecting objects with contours
+Combine threshold/mask → contours → bounding boxes:
+
+std::vector<std::vector<cv::Point>> contours;
+cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+for (auto &c : contours) {
+    double area = cv::contourArea(c);
+    if (area < 500) continue; // ignore noise
+
+    cv::Rect box = cv::boundingRect(c);
+    cv::rectangle(frame, box, cv::Scalar(0,255,0), 2);
+}
+
+- Object tracking
+Centroid tracking:
+
+Compute object’s center using moments.
+
+Store last known position.
+
+Draw line from old → new.
+
+cv::Moments M = cv::moments(contours[i]);
+int cx = int(M.m10/M.m00);
+int cy = int(M.m01/M.m00);
+cv::circle(frame, {cx,cy}, 5, cv::Scalar(0,0,255), -1);
+
+- Built in trackers (OpenCV tracking API)
+For tracking a selected region (e.g., tracking a person in a video):
+
+cv::Ptr<cv::Tracker> tracker = cv::TrackerKCF::create();
+
+cv::Rect2d roi = cv::selectROI("Frame", frame);
+tracker->init(frame, roi);
+
+while (cap.read(frame)) {
+    tracker->update(frame, roi);
+    cv::rectangle(frame, roi, cv::Scalar(255,0,0), 2);
+    cv::imshow("Tracking", frame);
+    if (cv::waitKey(30) == 27) break;
+}
+
+
+Available trackers: KCF, CSRT, MOSSE, MIL, BOOSTING.
+
+👉 CSRT = accurate, slower; MOSSE = super fast, less accurate.
+
+
+// Feature Detection & Matching ####################################
+
+- Corners (Harris, Shi-Tomasi)
+
+  A corner = a point with intensity change in two directions.
+
+  Harris detector
+  cv::Mat gray, dst, dstNorm;
+  cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+  cv::cornerHarris(gray, dst, 2, 3, 0.04);
+  cv::normalize(dst, dstNorm, 0, 255, cv::NORM_MINMAX);
+
+  for (int j=0; j<dstNorm.rows; j++) {
+      for (int i=0; i<dstNorm.cols; i++) {
+          if ((int)dstNorm.at<float>(j,i) > 200) {
+              cv::circle(img, cv::Point(i,j), 5, cv::Scalar(0,0,255), 2);
+          }
+      }
+  }
+
+  Shi-Tomasi (better for tracking)
+  std::vector<cv::Point2f> corners;
+  cv::goodFeaturesToTrack(gray, corners, 100, 0.01, 10);
+  for (auto &p : corners)
+      cv::circle(img, p, 3, cv::Scalar(0,255,0), -1);
+
+
+  👉 Used in optical flow tracking (next step).
+
+- Local feature descriptors (ORB, SIFT, SURF)
+Corners alone aren’t enough — we need descriptors that describe the neighborhood around each keypoint.
+
+ORB (fast, free, works in real-time)
+cv::Ptr<cv::ORB> orb = cv::ORB::create();
+std::vector<cv::KeyPoint> keypoints;
+cv::Mat descriptors;
+
+orb->detectAndCompute(img, cv::noArray(), keypoints, descriptors);
+cv::Mat out;
+cv::drawKeypoints(img, keypoints, out, cv::Scalar(0,255,0));
+cv::imshow("ORB Keypoints", out);
+
+SIFT (more robust, but slower — patented until 2020)
+cv::Ptr<cv::SIFT> sift = cv::SIFT::create();
+sift->detectAndCompute(img, cv::noArray(), keypoints, descriptors);
+
+
+👉 SIFT works better for illumination & scale changes.
+
+- Feature matching
+To match features between two images:
+
+cv::BFMatcher matcher(cv::NORM_HAMMING, true);
+std::vector<cv::DMatch> matches;
+matcher.match(desc1, desc2, matches);
+
+cv::Mat imgMatches;
+cv::drawMatches(img1, kp1, img2, kp2, matches, imgMatches);
+cv::imshow("Matches", imgMatches);
+
+
+BFMatcher = brute force (simple, works well).
+
+For ORB → use NORM_HAMMING.
+
+For SIFT → use NORM_L2.
+
+- Filtering matches (Lowe's ration test)
+Avoid false matches by keeping only good pairs:
+
+std::vector<std::vector<cv::DMatch>> knnMatches;
+matcher.knnMatch(desc1, desc2, knnMatches, 2);
+
+std::vector<cv::DMatch> good;
+for (auto &m : knnMatches) {
+    if (m[0].distance < 0.75 * m[1].distance) {
+        good.push_back(m[0]);
+    }
+}
+
+
+- Applications
+Image stitching → panorama creation.
+
+Object recognition → find logo/object in scene.
+
+Tracking → track keypoints across frames.
+
+AR → detect planar markers.
+
+
+// Machine Learning integration in OpenCV ##########################
+- OpenCV ML module
+
+  OpenCV has cv::ml namespace with classifiers like:
+
+  KNearest (kNN)
+
+  SVM
+
+  NormalBayesClassifier
+
+  DecisionTree
+
+  RandomForest (RTrees)
+
+  ANN_MLP (basic neural nets)
+
+  👉 Usually, OpenCV ML is used for lightweight tasks (digits,
+    shapes, object classification). For heavy
+    lifting, we’d use scikit-learn or deep learning frameworks.
+
+- k-Nearest Neighbors (kNN)
+
+  Simple but effective: classify sample by looking at nearest neighbors in feature space.
+
+  Example: handwritten digits (OpenCV’s sample dataset)
+  cv::Ptr<cv::ml::KNearest> knn = cv::ml::KNearest::create();
+
+  cv::Mat trainData, labels;
+  // load training data (each row = sample, each col = feature)
+
+  knn->train(trainData, cv::ml::ROW_SAMPLE, labels);
+
+  cv::Mat sample; // single row with features
+  float response = knn->findNearest(sample, 3, cv::noArray());
+
+
+  👉 kNN is good for small datasets, but
+   memory-hungry for large ones.
+
+
+- Support Vector Machine (SVM)
+
+  SVM finds a hyperplane that separates classes.
+  Great for linearly/non-linearly separable data.
+
+  cv::Ptr<cv::ml::SVM> svm = cv::ml::SVM::create();
+  svm->setType(cv::ml::SVM::C_SVC);
+  svm->setKernel(cv::ml::SVM::RBF);
+  svm->setC(2.5);
+  svm->setGamma(0.5);
+
+  svm->train(trainData, cv::ml::ROW_SAMPLE, labels);
+
+  // prediction
+  float res = svm->predict(sample);
+
+
+  👉 Used in early face recognition, digit classification, etc.
+
+- Preprocessing for ML
+
+  ML models don’t take raw images → we need features.
+
+  Typical preprocessing:
+
+  Convert to grayscale.
+
+  Resize to fixed size (e.g. 20x20).
+
+  Flatten into a vector (1 x (20*20) = 400 features).
+
+  Normalize to [0,1].
+
+  cv::Mat gray, resized;
+  cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+  cv::resize(gray, resized, cv::Size(20,20));
+  cv::Mat sample = resized.reshape(1,1);
+  sample.convertTo(sample, CV_32F, 1.0/255.0);
+
+  🔹 5. Example workflow: digit recognition
+
+  Load MNIST digits dataset (or OpenCV’s built-in digits.png).
+
+  Split into training/testing.
+
+  Extract features (flatten images).
+
+  Train kNN or SVM.
+
+  Predict new samples.
+
+
+// Deep learning ##################################################
+What is the DNN module?
+
+OpenCV’s cv::dnn module lets you:
+
+Load pre-trained models (TensorFlow, Caffe, ONNX, Darknet).
+
+Run inference (forward pass) efficiently.
+
+Detect objects, classify images, segment scenes.
+
+👉 It doesn’t train models (use PyTorch/TensorFlow for that)
+— but it’s great for running models in C++ real-time apps.
+
+- Loading a model
+
+  Example (loading YOLOv3):
+
+  cv::dnn::Net net = cv::dnn::readNetFromDarknet("yolov3.cfg", "yolov3.weights");
+  net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+  net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+
+
+  👉 You can also use GPU (CUDA or OpenCL).
+
+- Preparing input
+
+  Models expect a blob (normalized, resized tensor):
+
+  cv::Mat blob;
+  cv::dnn::blobFromImage(frame, blob, 1/255.0, cv::Size(416,416), cv::Scalar(), true, false);
+  net.setInput(blob);
+
+
+  1/255.0 → normalize to [0,1].
+
+  416x416 → YOLO input size.
+
+  swapRB=true → BGR → RGB.
+
+ - Forward pass
+
+   Get output layers (YOLO has multiple):
+
+   std::vector<cv::Mat> outputs;
+   net.forward(outputs, net.getUnconnectedOutLayersNames());
+
+
+   Now outputs contains detections.
+
+
+- Post-processing detections
+
+  For each detection:
+
+  First 5 values = [center_x, center_y, width, height, confidence].
+
+  Remaining = class probabilities.
+
+  for (auto &out : outputs) {
+      for (int i=0; i<out.rows; i++) {
+          float confidence = out.at<float>(i,4);
+          if (confidence > 0.5) {
+              cv::Rect box(
+                  (int)(out.at<float>(i,0) * frame.cols),
+                  (int)(out.at<float>(i,1) * frame.rows),
+                  (int)(out.at<float>(i,2) * frame.cols),
+                  (int)(out.at<float>(i,3) * frame.rows)
+              );
+              cv::rectangle(frame, box, cv::Scalar(0,255,0), 2);
+          }
+      }
+  }
+
+
+  👉 Apply Non-Max Suppression (NMS) to remove duplicate boxes.
+
+# Example of models
+YOLOv3 / v4 / v5 / v8 (ONNX) → object detection (general-purpose).
+
+SSD MobileNet → fast object detection (lighter than YOLO).
+
+ResNet, MobileNet classifiers → whole-image classification.
+
+Segmentation models → pixel-level (semantic segmentation)
+
+# Workflow yold object detection
+Download YOLO weights (.weights) + config (.cfg) + class labels (coco.names).
+
+Load with cv::dnn::readNetFromDarknet.
+
+Create blob from image.
+
+Forward pass → get detections.
+
+Draw bounding boxes + class labels.
+
+
+// Advanced projects & Integration ################################
+
+- Key principles for large projects
+
+  Modularize your code
+
+  Split into files: main.cpp, image_utils.cpp/h, video_utils.cpp/h, ml_utils.cpp/h, dnn_utils.cpp/h.
+
+  Each module handles a specific task (e.g., preprocessing, detection, tracking).
+
+  CMake integration
+
+  Use target_include_directories and target_link_libraries for each module.
+
+  Keep CMakeLists.txt clean and maintainable.
+
+  Configurable parameters
+
+  Keep thresholds, colors, model paths in a separate config.h or JSON file.
+
+  Makes tuning easier without recompiling everything.
+
+  Pipeline approach
+
+  Input → Preprocess → Detect → Track → Annotate → Output.
+
+  Can apply filters, transformations, and ML/DNN sequentially.
+
+- Example project: Real-time object tracking + classification
+
+  Goal: Detect objects in webcam feed, classify them, track their motion, and draw annotations.
+
+  Pipeline:
+
+  Capture webcam frame
+
+  Preprocess (resize, blur, convert color)
+
+  Detect objects using color / contour / DNN
+
+  Track objects with centroid tracking or OpenCV tracker
+
+  Classify object (optional: ML or DNN)
+
+  Draw bounding boxes, labels, and motion path
+
+  Output to screen (or save video)
+
+  Example folder structure
+  ProjectRoot/
+  ├─ CMakeLists.txt
+  ├─ main.cpp
+  ├─ image_utils.cpp/h
+  ├─ video_utils.cpp/h
+  ├─ detection_utils.cpp/h
+  ├─ ml_utils.cpp/h
+  ├─ dnn_utils.cpp/h
+  ├─ config.h
+  └─ models/       # pretrained models (YOLO, MobileNet)
+
+  Example main.cpp skeleton
+  #include "image_utils.h"
+  #include "video_utils.h"
+  #include "dnn_utils.h"
+  #include "ml_utils.h"
+
+  int main() {
+      cv::VideoCapture cap(0);
+      if (!cap.isOpened()) return -1;
+
+      // Load DNN model
+      cv::dnn::Net net = loadYOLO("models/yolov3.cfg", "models/yolov3.weights");
+
+      std::vector<cv::Rect> trackedObjects;
+
+      while (true) {
+          cv::Mat frame;
+          cap >> frame;
+          if (frame.empty()) break;
+
+          // Preprocessing
+          cv::Mat proc = preprocess(frame);
+
+          // Detection
+          std::vector<cv::Rect> boxes = detectObjects(proc, net);
+
+          // Tracking (update tracked objects)
+          updateTracking(trackedObjects, boxes);
+
+          // Annotation
+          annotate(frame, trackedObjects);
+
+          cv::imshow("Real-Time Tracker", frame);
+          if (cv::waitKey(1) == 27) break;
+      }
+
+      cap.release();
+      cv::destroyAllWindows();
+      return 0;
+  }
+
+- Typical modules explained
+
+  image_utils.cpp/h
+
+  preprocess() → blur, resize, color conversion
+
+  thresholding(), edgeDetection()
+
+  video_utils.cpp/h
+
+  openCapture()
+
+  writeVideo()
+
+  frameRateControl()
+
+  dnn_utils.cpp/h
+
+  loadYOLO()
+
+  forwardPass()
+
+  postProcessDetections()
+
+  ml_utils.cpp/h
+
+  trainKNN()
+
+  trainSVM()
+
+  predictSample()
+
+  tracking_utils.cpp/h
+
+  updateTracking() → centroid / OpenCV trackers
+
+  annotate_utils.cpp/h
+
+  drawBoundingBoxes()
+
+  drawLabels()
+
+  drawMotionPath()
+
+  🔹 4. Example project ideas
+
+  Smart Surveillance
+
+  Detect and track people
+
+  Alert when entering restricted areas
+
+  Interactive Whiteboard Tracker
+
+  Detect marker tip
+
+  Track motion
+
+  Draw virtual annotations
+
+  Object Sorting Robot
+
+  Detect object type using DNN or ML
+
+  Track motion
+
+  Send commands to robotic arm
+
+  Document Scanner + OCR
+
+  Detect document edges (contours + perspective transform)
+
+  Warp to flat rectangle
+
+  Feed to OCR engine
+
+  Augmented Reality
+
+  Detect planar surfaces (keypoints + homography)
+
+  Overlay virtual objects
+
+  🔹 5. Best practices
+
+  Always debug visually: draw intermediate outputs (edges, masks, contours).
+
+  Filter noise early: small contours, low-confidence detections.
+
+  Keep pipeline modular: allows testing each component individually.
+
+  Use configuration files: easy parameter tuning without recompiling.
+
+  Optimize for real-time: resize frames, use faster models (YOLO-tiny, MobileNet), limit max tracked objects.
+

@@ -1,0 +1,29 @@
+// Simple definition
+
+// Using cv::Rect
+cv::Mat myROI = (img,
+    cv::Rect(
+        // rectangular region
+        //  pos of upper left corner
+        img.cols-logo.cols,
+        img.rows-logo.rows,
+        // size : width and height
+        logo.cols,
+        logo.rows);
+logo.copyTo(myROI);
+
+// Using cv::Range
+myROI = image(
+    cv::Range(
+        img.rows-logo.rows, img.rows),
+    cv::Range(
+        img.cols-logo.cols, img.cols));
+
+
+// ROI made of some lines of an image
+cv::Mat imageROI = image.rowRange(start,end);
+cv::Mat imageROI = image.colRange(start, end);
+
+// using masks top copy roi to an image
+cv::Mat mask(logo);
+logo.copyTo(imageROI, mask);

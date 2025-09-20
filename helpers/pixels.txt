@@ -1,23 +1,6 @@
-//processing.cpp
-
-#include <processing.h>
-#include <iostream>
+// salt pepper img.at<uchar>(y, x);
 #include <random>
 
-#include "image_utils.h"
-
-
-// fliping image
-void flipImage(cv::Mat& image, cv::Mat& flip_image, int code) {
-    if (image.empty()) {
-        std::cerr << "Empty images was given \n";
-        return;
-    }
-
-    cv::flip(image, flip_image, code);
-}
-
-// draws salt pepper
 void salt(cv::Mat image, int n) {
     std::default_random_engine generator;
     std::uniform_int_distribution<int> randomRow(0, image.rows - 1);
@@ -28,7 +11,7 @@ void salt(cv::Mat image, int n) {
         i = randomCol(generator);
         j = randomRow(generator);
 
-        if(image.type() == CV_8U) {
+        if(image.type() == CV8UC1) {
             image.at<uchar>(j,i) = 255;
 
         } else if (image.type() == CV_8UC3) {
@@ -42,11 +25,42 @@ void salt(cv::Mat image, int n) {
     }
 }
 
-// Color Reduction with IO handling
+//
+cv::Mat_<uchar> img(image);
+// img(50, 100) same as  image.at<uchar>(50, 100);
+
+
+// Scanning with ptr
+// color reduction by
+//  subdividing RGB space into cubes of equal sizes
+// N (reduction factor) devides each pixel value
+//  mult result with N and
+//  add N/2 to center position
+
+opencv2/core/core.hpp
+opencv2/highgui/highgui.hpp
+
+void colorReduce(cv::Mat image, int div=64) {
+    int nl = image.rows;
+    int nc = image.cols * image.channels();
+
+    for (int j = 0; j < nl; j++) {
+        uchar* data = image.ptr<uchar>(j);
+        for (int i = 0; i < nc; i++) {
+            data[i] = data[i]/div*div + div/2;
+            // data[i] = data[i] % div + div/2;
+            // *data++= *data/div * div + div/2;
+        }
+    }
+}
+
+
+
+// IO handling
 void colorReduceIO(
-    const cv::Mat &image, // means the image won't be modified
-    cv::Mat &result,
-    int div) {
+    const cv::Mat image, // means the image won't be modified
+    cv::Mat result,
+    int div=64) {
     int nl = image.rows;
     int nc = image.cols * image.channels();
 
@@ -55,25 +69,42 @@ void colorReduceIO(
 
     // scanning
     for (int j = 0; j < nl; j++) {
-        const unsigned char *data_in = image.ptr<uchar>(j);
+        uchar* data_in = image.ptr<uchar>(j);
         uchar* data_out = result.ptr<uchar>(j);
 
         for (int i = 0; i < nc; i++) {
-            data_out[i] = data_in[i] / div*div + div/2;
+            data_out[i] = data_in[i] / div*div + div/2
         }
     }
 }
 
-// Color Reduction Bitwise
-void colorReduceB(cv::Mat image, int div) {
+// Bitwise operations
+// N is a pow(2, n) so N bits of pixel value
+//  give lower multiple of div
+
+// Comuted by a bit shift
+// uchar mask = 0XFF<<n;
+// *data & = mask;
+// *data++ += div>>1;
+
+// Continuity check
+void colorReduce6(cv::Mat image, int div=64) {
+    // or
+    if (image.isContinuous()) {
+        image.reshape(
+            1, // new number of channels
+            1); // new number of rows
+
+    }
+
     int nl = image.rows;
     int nc = image.cols * image.channels();
 
     if (image.isContinuous()) {
         nc = nc*nl;
         nl = 1;
-    }
 
+    }
     int n = static_cast<int>(log(static_cast<double>(div))/log(2.0) + 0.5);
 
     uchar mask = 0xFF<<n;
@@ -88,14 +119,15 @@ void colorReduceB(cv::Mat image, int div) {
     }
 }
 
-// Color Reduction using Iterator Objects
+
+// Iterator Objects
 void colorReduceIt(cv::Mat image, int div) {
     int n = static_cast<int>(log(static_cast<double>(div))/log(2.0) + 0.5);
     uchar mask = 0xFF<<n;
     uchar div2 = div >> 1;
 
-    cv::Mat_<cv::Vec3b>::iterator it = image.begin<cv::Vec3b>();
-    cv::Mat_<cv::Vec3b>::iterator itend = image.end<cv::Vec3b>();
+    cv::Mat_<cv::Vec3b>::Iterator it = image.begin<cv::Vec3b>();
+    cv::Mat_<cv::Vec3b>::Iterator itend = image.end<cv::Vec3b>();
 
     for ( ; it != itend; ++it) {
         (*it)[0] &= mask;
@@ -106,9 +138,37 @@ void colorReduceIt(cv::Mat image, int div) {
         (*it)[2] += div2;
 
     }
+
+    while (it != itend) {
+        //
+        ++it;
+    }
+
+    // Not modifying the current instance
+    cv::Mat ConstIterator_<cv::Vec3b> it;
+    cv::Mat_<cv::Vec3b>::const_iterator it;
 }
 
-// Sharpenning
+
+// Efficient scanning loops
+// getting the computational time
+const int64 start = cv::getTickCount();
+colorReduce(image, 64);
+
+double duration = (cv::getTickCount() - start)/
+cv::getTickFrequency();
+
+//
+int nc = image.cols * image.channels();
+uchar div2 = div >> 1;
+
+for (int i= 0; i < nc; i++) {
+    *(data+i) &= mask;
+    *(data+i) += div2;
+}
+
+
+// Scanning with neighbor access
 void sharpen(const cv::Mat &image, cv::Mat &result) {
     result.create(image.size(), image.type());
     int nchannels = image.channels();
@@ -120,20 +180,20 @@ void sharpen(const cv::Mat &image, cv::Mat &result) {
         uchar* output = result.ptr<uchar>(j);
 
         for (int i = nchannels; i < (image.cols-1)*nchannels; i++) {
-            *output++= cv::saturate_cast<uchar>(
-                 5*current[i]-current[i-nchannels]
-                 -current[i+nchannels] - previous[i]-next[i]);
+           *output++= cv::sturate_cast<uchar>(
+                5*current[i]-current[i-nchannels]
+                -current[i+channels] - previous[i]-next[i]));
         }
     }
 
     result.row(0).setTo(cv::Scalar(0));
-    result.row(result.rows-1).setTo(cv::Scalar(0));
-    result.col(0).setTo(cv::Scalar(0));
-    result.col(result.cols-1).setTo(cv::Scalar(0));
+    result.row(result.rows-1).setTot(cv::Scalar(0));
+    resutl.col(0).setTo(cv::Scalar(0));
+    result.col(result.cols-1).setTo(cv::Scalar(0)));
 }
 
-// Sharpen filtering
-void sharpen2D(const cv::Mat &image, cv::Mat &result) {
+//
+void sharpen2D(const cv::Mat image, cv::Mat result) {
     cv::Mat kernel(3,3,CV_32F,cv::Scalar(0));
 
     kernel.at<float>(1,1) = 5.0;
@@ -143,4 +203,5 @@ void sharpen2D(const cv::Mat &image, cv::Mat &result) {
     kernel.at<float>(1,2) = -1.0;
 
     cv::filter2D(image,result,image.depth(),kernel);
+
 }

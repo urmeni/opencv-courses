@@ -16,12 +16,38 @@ cv::Mat loadImage(const std::string &path, int flags) {
     return img;
 }
 
-void showImage(const std::string &winName, const cv::Mat &img, int waitMs) {
+void showImage(const std::string &winName, const cv::Mat &img) {
     if (img.empty()) {
         std::cerr << "showImage called with empty Mat\n";
         return;
     }
     cv::namedWindow(winName, cv::WINDOW_AUTOSIZE);
     cv::imshow(winName, img);
-    cv::waitKey(waitMs); // 0 => block until key, >0 => wait that many ms
 }
+
+// showing multiple images
+void showImages(const std::vector<std::string> &winNames,
+                const std::vector<cv::Mat>& images) {
+    if (images.size() != winNames.size()) {
+        std::cerr << "Number of images mismatch with the number of windows names\n";
+        return;
+    }
+
+    for (size_t i = 0; i < images.size(); i++) {
+        if (images[i].empty()) {
+            std::cerr << "Image" << i << " is empty\n";
+            return;
+        }
+        cv::imshow(winNames[i], images[i]);
+    }
+
+
+}
+
+
+// waiting certain ms or key down until destruction
+void waitDestroy (int ms) {
+    cv::waitKey(ms);
+    cv::destroyAllWindows();
+}
+
