@@ -3,8 +3,29 @@
 #include <processing.h>
 #include <iostream>
 #include <random>
-
 #include "image_utils.h"
+#include <math.h>
+
+//remapping
+void wave(const cv::Mat &image, cv::Mat &result) {
+    cv::Mat srcX(image.rows, image.cols, CV_32F);
+    cv::Mat srcY(image.rows,image.cols, CV_32F);
+
+    for (int i=0; i<image.rows; i++) {
+        for (int j=0; j<image.cols; j++) {
+
+            srcX.at<float>(i,j) = j;
+            srcY.at<float>(i,j) = i + 3*sin(j/6.0);
+
+            //srcX.at<float>(i,j) = image.cols-j-i-1;
+            //srcY.at<float>(i,j) = i;
+
+
+        }
+    }
+
+    cv::remap(image, result, srcX, srcY, cv::INTER_LINEAR);
+}
 
 
 // fliping image

@@ -10,11 +10,21 @@ int main() {
     data.mainWin = "Display Image";
     data.resultWin = "Resulting Image";
 
-    std::string path = "data/test.jpg";
+    std::string path = "data/imageA.jpg";
+    std::string secpath = "data/brick.jpg";
     std::cout << "CWD: " << std::filesystem::current_path() << "\n";
 
-    data.originalImg = loadImage(path, cv::IMREAD_GRAYSCALE);
-    if (data.originalImg.empty()) return -1;
+    // Loading images
+    cv::Mat imgA = loadImage(path, cv::IMREAD_GRAYSCALE);
+    if (imgA.empty()) return -1;
+    cv::Mat blend = loadImage(secpath, cv::IMREAD_GRAYSCALE);
+    if (blend.empty()) return -1;
+
+
+    wave(imgA, imgA);
+
+
+    data.originalImg = imgA;
 
     data.originalImg.copyTo(data.displayImage);
 

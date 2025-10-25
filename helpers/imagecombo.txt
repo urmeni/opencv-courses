@@ -1,0 +1,43 @@
+// Multiple windows
+cv::addWeighted(image1, 0.7, image2, 0.9, reuslt);
+cv::namedWindow("result");
+cv::imshow("result", result");
+
+// Image Scalar Functions
+cv::add(imgA, imgB, resultC);
+
+cv::add(imgA, cv::Scalar(k), resulC);
+
+cv::addWeighted(imgA, k1, img2, k2, k3, resultC);
+
+cv::scaleAdd(imgA, k, imgB, resultC);
+
+cv::add(imgA, imgB, resultC, mask);
+
+// Bitwise Operator
+cv::bitwise AND
+cv::bitwise OR
+cv::bitwise xOR
+cv::bitwise NOT
+cv::min or cv::max per element value
+
+// stay within defined pixel value Domain no overflow must have the same size and matrix element type
+cv::saturate_cast
+
+// single img input
+cv::square root, cv::power, cv::abs, cv::cube root, cv::exponent
+
+// Overloaded arithmetic operations
+result = 0.7 * image1 + 0.9 img2;
+
+// single channeled operations
+std::vector<cv::Mat> planes;
+
+cv::split(image1,planes);
+
+planes[0] += image2
+
+cv::merge(planes, result);
+
+cv::merge(planes,result) //merges into 3 channel
+

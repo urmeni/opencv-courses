@@ -1,0 +1,187 @@
+
+
+#include "colordetector.h"
+// main
+    ColorDetector cdetect;
+
+    ... // loading the image
+
+    cdetect.setTargetColor(230, 190, 130);
+
+    ... // naming the window
+
+    cv::Mat result = cdetect.process(image);
+
+    ... // showing the image
+
+    ...
+
+
+// colordetector.cpp
+
+#include "colordetector.h"
+#include <vector>
+
+cv::Mat ColorDetector::process(const cv::Mat &image) {
+    result.create(image.size(), CV_8U);
+
+    if(useLab)
+        cv::cvtColor(image, converted, CV_BGR2Lab);
+
+    cv::Mat_<cv::Vec3b>::const_iterator it = image.begin<cv::Vec3b>();
+    cv::Mat_<cv::Vec3b>::const_iterator itend = image.end<cv::Vec3b>();
+    cv::Mat_<cv::Vec3b>::const_iterator itout = result.begin<uchar>();
+
+    if (useLab) {
+        it = converted.begin<cv::Vec3b>();
+        itend = converted.end<cv::Vec3b>();
+    }
+
+    for ( ; it != itend, ++it, ++itout) {
+
+        if (getDistanceToTargetColor(*it)<maxDist) {
+            *itout = 255;
+        } else {
+            *itout = 0;
+        }
+    }
+    return result;
+}
+
+
+// colordetect.h
+
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+class ColorDetector {
+    private:
+        int maxDist;
+        cv::Vec3b target;
+        cv::Mat converted;
+        bool useLab;
+
+        cv::Mat result;
+
+    public:
+        ColorDetector() : maxDist(100), target(0,0,0), useLab(false) {}
+        ColorDetector(bool useLab) : maxDist(100), target(0,0,0), useLab(useLab){}
+
+        ColorDetector(uchar blue, uchar green, uchar redk çjt mxDist = 100,
+            bool useLab=false): maxDost(mxDist), useLab(useLab) {
+                setTargetColor(blue, green, red);
+            }
+
+        int getDistanceToTargetColor(const cv::Vec3b& color) const {
+            return getCOlorDistance(color, target);
+        }
+
+        int getColorDistance(const cv::Vec3b& color1, const cv::Vec3b& color2) const {
+            return  abs(color1[0] - color2[0])+
+                    abs(color1[1] - color2[1])+
+                    abs(color1[2] - color2[2]);
+
+            // or
+            return static_cast<int>(
+                cv::norm<int,3>(cv::Vec3i(
+                    color[0]-color2[0],
+                    color[1]-color2[1],
+                    color[2]-color2[2])
+
+            ));
+
+            // or
+            cv::Vec3b dist;
+            cv::absdiff(color, color2, dist);
+            return cv::suim(dist)[0];
+        }
+
+        cv::Mat process(const cv::Mat &image);
+
+        cv::Mat operator()(const cv::Mat &image) {
+            cv::Mat input;
+
+            if (useLab) {
+                cv::cvtColor(image, input, CV_BGR2Lab);
+            } else {
+                input = image
+            }
+
+            cv::Mat output;
+            cv::absdiff(input, cv::Scalar(target), output);
+
+            std::vector<cv::Mat> images;
+            cv::split(output, images);
+
+            output = images[0]+images[1]+images[2];
+            cv::threshold(
+                output,
+                output,
+                maxDist,
+                255,
+                cv::THRESH_BINARY_INV);
+
+            return output;
+        }
+
+        void setColorDistanceThreshold(int distance) {
+            if (distance<0)
+                distance=0;
+                maxDist=distance;
+        }
+
+        int getColorDistanceThreshold() const {
+            return maxDist;
+        }
+
+        void setTargetColor(uchar blue, uchar, green, uchar red) {
+            target = cv::Vec3b(blue, green, red);
+
+            if (useLab) {
+                cv::Mat tmp(1, 1, CV_8UC3);
+                tmp.at<cv::Vec3b>(0,0) = cv::Vec3b(blue,green,red);
+
+                cv::cvtColor(tmp, tmp, CV_BRG2Lab);
+
+                target = tmp.at<cv::Vec3b>(0,0);
+            }
+        }
+
+        void setTargetColor(cv::Vec3b color) {
+            target = color;
+        }
+
+        cv::Vec3b getTargetColor() const {
+            return target;
+        }
+};
+
+
+// colorDetection.cpp
+
+
+
+cv::floodFill(
+    image,
+    cv::Point(100,50),
+    cv::Scalar(255, 255, 255),
+    (cv::Rect*)0,
+    cv::Scalar(35, 35, 35),
+    cv::Scalar(35, 35, 35),
+    cv::FLOODFILL_FIXED_RANGE);
+
+cv::namedWindow("Flood Fill result");
+result = colordetector(image);
+cv::imshow("Flood Fill result", image);
+
+cv::Mat colors(100, 300, CV_8UC3, cv::Scalar(100, 200, 150));
+cv::Mat range = clors.colRange(0, 100);
+range = range + cv::Scalar(10, 10, 10);
+range = colors.colRange(200, 300);
+range = range + cv::Scalar(-10, -10, 10);
+
+cv::namedWindow("3 colors");
+cv::imshow("3 colors", colors);
+
+cv::Mat labImage(100, 300, CV_8UC3, cv::Scalar(100, 200, 150));
+cv::cvtColor(labImage, labImage, CV_BGR2Lab);

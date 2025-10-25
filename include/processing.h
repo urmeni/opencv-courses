@@ -4,6 +4,9 @@
 #include <opencv2/opencv.hpp>
 
 
+// Remapping
+void wave(const cv::Mat &image, cv::Mat &result);
+
 // fliping image
 void flipImage(cv::Mat& image, cv::Mat& flip_image, int flipCode);
 
