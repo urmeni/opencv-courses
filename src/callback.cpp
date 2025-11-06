@@ -26,20 +26,20 @@ void onMouse(int event, int x, int y, int flags, void* userdata) {
     auto *data = reinterpret_cast<CallbackData*>(userdata);
 
     std::cout << "Clicked at : " << x << ", " << y << " Value = "
-        << static_cast<int>(data->originalImg.at<uchar>(y, x)) << std::endl;
+        << static_cast<int>(data->displayImg.at<uchar>(y, x)) << std::endl;
 
-    // Resetting from original image
-    data->originalImg.copyTo(data->displayImage);
+    // Resetting from result image
+    data->resultImg.copyTo(data->displayImg);
 
     // Draw horizontal line
     cv::line(
-        data->displayImage,
+        data->displayImg,
         cv::Point(0, y),
-        cv::Point(data->displayImage.cols, y),
+        cv::Point(data->displayImg.cols, y),
         cv::Scalar(255, 0, 0), 1);
 
-    cv::imshow(data->mainWin, data->displayImage);
+    cv::imshow(data->dispWin, data->displayImg);
 
     // Plot Row intensity
-    plotRowIntensity(data->originalImg, y, data->resultWin);
+    plotRowIntensity(data->resultImg, y, data->evalWin);
 }

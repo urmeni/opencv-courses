@@ -7,33 +7,40 @@
 
 int main() {
     CallbackData data;
-    data.mainWin = "Display Image";
-    data.resultWin = "Resulting Image";
+    data.origWin = "Original Image";
+    data.dispWin = "Display Image";
+    data.resWin = "Result Image";
+    data.evalWin = "Evaluation Vue";
 
-    std::string path = "data/imageA.jpg";
-    std::string secpath = "data/brick.jpg";
+    std::string path = "/home/urmenus/CLionProjects/opencv-courses/data/imageA.jpg";
+    std::string secpath = "/home/urmenus/CLionProjects/opencv-courses/data/brick.jpg";
     std::cout << "CWD: " << std::filesystem::current_path() << "\n";
 
     // Loading images
     cv::Mat imgA = loadImage(path, cv::IMREAD_GRAYSCALE);
-    if (imgA.empty()) return -1;
     cv::Mat blend = loadImage(secpath, cv::IMREAD_GRAYSCALE);
-    if (blend.empty()) return -1;
 
 
+    data.displayImg = imgA;
+    data.displayImg.copyTo(data.originalImg);
+
+    //processing
     wave(imgA, imgA);
+    flipImage(imgA, imgA, 1);
+    salt(imgA, 100);
+    colorReduceIt(imgA, 50);
+    sharpen(imgA, imgA);
+    //sharpen2D(imgA, imgA);
 
+    data.displayImg.copyTo(data.resultImg);
 
-    data.originalImg = imgA;
-
-    data.originalImg.copyTo(data.displayImage);
-
-    cv::namedWindow(data.mainWin);
 
     // Callbacks
+    cv::namedWindow(data.dispWin);
     cv::setMouseCallback("Display Image", onMouse, &data);
 
-    showImage(data.mainWin, data.displayImage);
+    showImage(data.origWin, data.originalImg);
+    showImage(data.dispWin, data.displayImg);
     waitDestroy(0);
     return 0;
 }
