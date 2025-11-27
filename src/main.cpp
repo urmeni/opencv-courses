@@ -4,39 +4,53 @@
 #include <iostream>
 #include <filesystem>
 #include <callback.h>
+#include <colordetector.h>
+#include "histogram.h"
+
+std::string data_path = DATA_DIR;
+std::string img_name = "dark.png";
+std::string path = data_path + "/" + img_name;
 
 int main() {
+    // Setup ============================
+    // data
     CallbackData data;
     data.origWin = "Original Image";
     data.dispWin = "Display Image";
     data.resWin = "Result Image";
     data.evalWin = "Evaluation Vue";
 
-    std::string path = "/home/urmenus/CLionProjects/opencv-courses/data/imageA.jpg";
-    std::string secpath = "/home/urmenus/CLionProjects/opencv-courses/data/brick.jpg";
-    std::cout << "CWD: " << std::filesystem::current_path() << "\n";
+    // loading image
+    cv::Mat img = loadImage(path);
+    img.copyTo(data.originalImg);
 
-    // Loading images
-    cv::Mat imgA = loadImage(path, cv::IMREAD_GRAYSCALE);
-    cv::Mat blend = loadImage(secpath, cv::IMREAD_GRAYSCALE);
+    // ============================================
+    // processing =================================
+    // ============================================
+    // The histogram object
+    Histogram1D h;
+
+    // Expanding gamma
+    cv::Mat expandedImg = computeRangeExpansion(img);
+
+    // Compute the histogram
+    cv::Mat histoOrig = h.getHistogram(img);
+    cv::Mat histoExpanded = h.getHistogram(expandedImg);
 
 
-    data.displayImg = imgA;
-    data.displayImg.copyTo(data.originalImg);
 
-    //processing
-    wave(imgA, imgA);
-    flipImage(imgA, imgA, 1);
-    salt(imgA, 100);
-    colorReduceIt(imgA, 50);
-    sharpen(imgA, imgA);
-    //sharpen2D(imgA, imgA);
+    // Display a histogram as an image
+    cv::namedWindow("Histogramme Original");
+    cv::imshow("Histogramme Original", h.getHistogramImage(img));
 
+    cv::namedWindow("Histogramme Etendu");
+    cv::imshow("Histogramme Etendu", h.getHistogramImage(expandedImg));
+
+
+    data.displayImg = expandedImg;
     data.displayImg.copyTo(data.resultImg);
-
-
-    // Callbacks
     cv::namedWindow(data.dispWin);
+    // Callbacks ==================================
     cv::setMouseCallback("Display Image", onMouse, &data);
 
     showImage(data.origWin, data.originalImg);

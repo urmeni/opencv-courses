@@ -34,3 +34,12 @@ void sharpen(const cv::Mat &image, cv::Mat &result);
 
 // Sharpen filtering
 void sharpen2D(const cv::Mat &image, cv::Mat &result);
+
+//
+void detectHScolor(const cv::Mat& image,		// input image
+    double minHue, double maxHue,	// Hue interval
+    double minSat, double maxSat,	// saturation interval
+    cv::Mat& mask);
+
+// Gamma expansion
+cv::Mat computeRangeExpansion(const cv::Mat& image);

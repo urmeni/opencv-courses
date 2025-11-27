@@ -165,3 +165,65 @@ void sharpen2D(const cv::Mat &image, cv::Mat &result) {
 
     cv::filter2D(image,result,image.depth(),kernel);
 }
+
+void detectHScolor(const cv::Mat& image,		// input image
+    double minHue, double maxHue,	// Hue interval
+    double minSat, double maxSat,	// saturation interval
+    cv::Mat& mask) {				// output mask
+
+    // convert into HSV space
+    cv::Mat hsv;
+    cv::cvtColor(image, hsv, cv::COLOR_BGR2HSV);
+
+    // split the 3 channels into 3 images
+    std::vector<cv::Mat> channels;
+    cv::split(hsv, channels);
+    // channels[0] is the Hue
+    // channels[1] is the Saturation
+    // channels[2] is the Value
+
+    // Hue masking
+    cv::Mat mask1; // below maxHue
+    cv::threshold(channels[0], mask1, maxHue, 255, cv::THRESH_BINARY_INV);
+    cv::Mat mask2; // over minHue
+    cv::threshold(channels[0], mask2, minHue, 255, cv::THRESH_BINARY);
+
+    cv::Mat hueMask; // hue mask
+    if (minHue < maxHue)
+        hueMask = mask1 & mask2;
+    else // if interval crosses the zero-degree axis
+        hueMask = mask1 | mask2;
+
+    // Saturation masking
+    // below maxSat
+    cv::threshold(channels[1], mask1, maxSat, 255, cv::THRESH_BINARY_INV);
+    // over minSat
+    cv::threshold(channels[1], mask2, minSat, 255, cv::THRESH_BINARY);
+
+    cv::Mat satMask; // saturation mask
+    satMask = mask1 & mask2;
+
+    // combined mask
+    mask = hueMask&satMask;
+}
+
+
+// Gamma expansion
+cv::Mat computeRangeExpansion(const cv::Mat& image) {
+    cv::Mat grayImage;
+    // 1. Assurer que l'image est en niveaux de gris (1 canal)
+    if (image.channels() == 3) {
+        cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+    } else {
+        image.copyTo(grayImage);
+    }
+
+    cv::Mat expandedImage;
+
+    // 2. Effectuer l'expansion de gamme linéaire
+    // cv::NORM_MINMAX met à l'échelle les éléments pour que la valeur minimale
+    // soit mappée à 0 et la valeur maximale à 255.
+    cv::normalize(grayImage, expandedImage, 0, 255, cv::NORM_MINMAX, CV_8U);
+
+    return expandedImage;
+}

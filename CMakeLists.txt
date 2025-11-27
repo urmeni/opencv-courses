@@ -16,6 +16,7 @@ add_library(mycvlib
         src/image_utils.cpp
         src/processing.cpp
         src/callback.cpp
+        src/colordetector.cpp
 )
 
 # public include dir for users of the lib
@@ -26,9 +27,18 @@ target_link_libraries(mycvlib PUBLIC ${OpenCV_LIBS})
 
 # main executable
 add_executable(app src/main.cpp
-        include/processing.h
-        include/callback.h
-        src/callback.cpp)
+        include/colordetector.h
+        src/colordetector.cpp
+        include/histogram.h
+)
+
+# data path
+set(DATA_DIR_PATH "${CMAKE_SOURCE_DIR}/data")
+
+# macro definition
+target_compile_definitions(app PRIVATE
+        DATA_DIR="${DATA_DIR_PATH}"
+)
 
 # link to our library (and transitively OpenCV)
 target_link_libraries(app PRIVATE mycvlib)
