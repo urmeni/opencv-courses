@@ -1,10 +1,14 @@
 //processing.cpp
 
+#include <filesystem>
 #include <processing.h>
 #include <iostream>
 #include <random>
 #include "image_utils.h"
 #include <math.h>
+
+
+namespace fs = std::filesystem;
 
 //remapping
 void wave(const cv::Mat &image, cv::Mat &result) {
@@ -226,4 +230,227 @@ cv::Mat computeRangeExpansion(const cv::Mat& image) {
     cv::normalize(grayImage, expandedImage, 0, 255, cv::NORM_MINMAX, CV_8U);
 
     return expandedImage;
+}
+
+// Sobel Contour detection
+cv::Mat detectEdgesSobel(const cv::Mat& grayImage, int ksize) {
+    if (ksize % 2 == 0) ksize++; // ksize doit être impair
+    if (ksize < 3) ksize = 3;    // Minimum 3
+
+    cv::Mat grad_x, grad_y, abs_grad_x, abs_grad_y;
+    cv::Mat grad;
+
+    // Calcul du gradient x et y
+    // Utilisation de CV_16S pour éviter le débordement des entiers (16 bits signés)
+    cv::Sobel(grayImage, grad_x, CV_16S, 1, 0, ksize);
+    cv::Sobel(grayImage, grad_y, CV_16S, 0, 1, ksize);
+
+    // Conversion en valeurs absolues et en 8 bits (0-255)
+    cv::convertScaleAbs(grad_x, abs_grad_y); // Correction: abs_grad_y pour grad_y
+    cv::convertScaleAbs(grad_y, abs_grad_y); // Correction: abs_grad_y pour grad_y
+    cv::convertScaleAbs(grad_x, abs_grad_x);
+    cv::convertScaleAbs(grad_y, abs_grad_y);
+
+    // Combinaison des gradients (approximation de la magnitude)
+    cv::addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
+
+    // La binarisation est faite dans processAndEvaluate avec le seuil du trackbar
+    return grad; // Retourne l'image de gradient avant binarisation
+}
+
+// Laplace Contour detection
+cv::Mat detectEdgesLaplace(const cv::Mat& grayImage, int ksize) {
+    if (ksize % 2 == 0) ksize++; // ksize doit être impair
+    if (ksize < 3) ksize = 3;    // Minimum 3
+
+    cv::Mat abs_dst, dst;
+
+    // Application de l'opérateur de Laplace (Second ordre)
+    cv::Laplacian(grayImage, dst, CV_16S, ksize);
+
+    // Conversion en valeurs absolues et en 8 bits (0-255)
+    cv::convertScaleAbs(dst, abs_dst);
+
+    // La binarisation est faite dans processAndEvaluate avec le seuil du trackbar
+    return abs_dst; // Retourne l'image de gradient avant binarisation
+}
+
+// Canny Contour detection
+cv::Mat detectEdgesCanny(const cv::Mat& grayImage, double threshold1, double threshold2) {
+    cv::Mat detectedEdges;
+
+    // L'opérateur Canny (détection de gradient, suppression des non-maxima et seuillage par hystérésis)
+    cv::Canny(grayImage, detectedEdges, threshold1, threshold2, 3, true);
+
+    // Le résultat de Canny est déjà une image binaire 0/255.
+    return detectedEdges;
+}
+
+// Global treatement and evaluation function
+void processAndEvaluate(CallbackData* data) {
+    if (data->batch.empty()) return;
+
+    // Updating current original image
+    const ImagePair& currentPair = data->batch[data->currentImageIndex];
+    currentPair.originalImage.copyTo(data->originalImg);
+
+    // Updating current reference image
+    currentPair.referenceImage.copyTo(data->referenceImg);
+
+    // Converting the image to grayscale for the detection
+    cv::Mat grayImage;
+    if (data->originalImg.channels() == 3) {
+        cv::cvtColor(data->originalImg, grayImage, cv::COLOR_BGR2GRAY);
+    } else {
+        data->originalImg.copyTo(grayImage);
+    }
+
+    cv::Mat detectedEdges;
+    int threshold = data->canny_threshold1; // Used for Sobel/Laplace
+    int ksize = data->sobel_ksize * 2 + 1; // Kernel size: 1->3, 2->5, 3->7 always an odd number
+
+    // Selecting and applying detecdtion algorithme
+    if (data->detectorChoice == DETECTOR_SOBEL) {
+        cv::Mat gradImage = detectEdgesSobel(grayImage, ksize);
+        cv::threshold(gradImage, detectedEdges, threshold, 255, cv::THRESH_BINARY);
+
+    } else if (data->detectorChoice == DETECTOR_LAPLACE) {
+        cv::Mat gradImage = detectEdgesLaplace(grayImage, ksize);
+        cv::threshold(gradImage, detectedEdges, threshold, 255, cv::THRESH_BINARY);
+
+    } else if (data->detectorChoice == DETECTOR_CANNY) {
+        detectedEdges = detectEdgesCanny(grayImage, data->canny_threshold1, data->canny_threshold2);
+    }
+
+    // Copying the result to the structure
+    detectedEdges.copyTo(data->displayImg);
+
+    // Evaluation
+    // Uses `data->displayImg` (detected contours) and `currentPair.referenceImage` (manual contours)
+    data->currentMetrics = evaluateContours(data->displayImg, data->referenceImg, true);
+
+    // Showing images
+    showImage(data->origWin, data->originalImg);
+    showImage(data->dispWin, data->displayImg);
+    showImage(data->refWin, data->referenceImg);
+
+    // Showing metrics
+    cv::Mat metricsDisplay(400, 600, CV_8UC3, cv::Scalar(30, 30, 30));
+    int y_offset = 30;
+    int line_height = 30;
+
+    // Information on the image and detector
+    std::string filename = fs::path(currentPair.originalPath).filename().string();
+    cv::putText(metricsDisplay, "Image: " + filename, cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2);
+    y_offset += line_height;
+
+    std::string detectorName = (data->detectorChoice == DETECTOR_SOBEL) ? "Sobel" :
+                               (data->detectorChoice == DETECTOR_LAPLACE) ? "Laplace" : "Canny";
+    cv::putText(metricsDisplay, "Detector: " + detectorName, cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 200, 255), 2);
+    y_offset += line_height * 2;
+
+    // Five metrics
+    cv::putText(metricsDisplay, "--- Base measurements ---", cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 100, 100), 1);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "Total Detectes (Dt): " + std::to_string(data->currentMetrics.detected), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(200, 200, 200), 1);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "Total Reference (Rf): " + std::to_string(data->currentMetrics.reference), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(200, 200, 200), 1);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "Corrects (Dt n Rf): " + std::to_string(data->currentMetrics.correct), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(100, 255, 100), 1);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "False Positifs (FP): " + std::to_string(data->currentMetrics.falsePositive), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(100, 100, 255), 1);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "False Negatifs (FN): " + std::to_string(data->currentMetrics.falseNegative), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 100, 100), 1);
+    y_offset += line_height;
+
+    // Three performance metrics
+    y_offset += line_height / 2;
+    cv::putText(metricsDisplay, "--- Evaluation Metrics (P/TFP/TFN) ---", cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 100), 1);
+    y_offset += line_height;
+
+    cv::putText(metricsDisplay, "Performance (P): " + std::to_string(data->currentMetrics.P).substr(0, std::to_string(data->currentMetrics.P).find('.') + 4), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 255, 100), 2);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "rate Faux Positifs (TFP): " + std::to_string(data->currentMetrics.TFP).substr(0, std::to_string(data->currentMetrics.TFP).find('.') + 4), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 100, 255), 2);
+    y_offset += line_height;
+    cv::putText(metricsDisplay, "rate Faux Negatifs (TFN): " + std::to_string(data->currentMetrics.TFN).substr(0, std::to_string(data->currentMetrics.TFN).find('.') + 4), cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 100, 100), 2);
+
+    // Updating result Image
+    metricsDisplay.copyTo(data->resultImg);
+    // Showing result Image
+    cv::imshow(data->resWin, data->resultImg);
+}
+
+// Contour detection evaluation comared to a manually contour detected reference image
+CallbackData::EvaluationMetrics evaluateContours(const cv::Mat& detectedImage, const cv::Mat& referenceImage, bool useNeighborhood) {
+    CallbackData::EvaluationMetrics metrics;
+
+    if (detectedImage.empty() || referenceImage.empty() || detectedImage.size() != referenceImage.size() || detectedImage.channels() > 1 || referenceImage.channels() > 1) {
+        std::cerr << "Error : evaluation images are invalide (size, channels or empty)." << std::endl;
+        return metrics;
+    }
+
+    int rows = detectedImage.rows;
+    int cols = detectedImage.cols;
+
+    // making sure the images are binary
+    cv::Mat detectedBinary, referenceBinary;
+    cv::threshold(detectedImage, detectedBinary, 128, 255, cv::THRESH_BINARY);
+    cv::threshold(referenceImage, referenceBinary, 128, 255, cv::THRESH_BINARY);
+
+    // Counting total pixels of the reference
+    metrics.reference = cv::countNonZero(referenceBinary);
+
+    // Iterating to calculate five measuremenets
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            bool isDetected = detectedBinary.at<uchar>(i, j) > 0;
+
+            if (isDetected) {
+                metrics.detected++;
+            }
+
+            // --- Intersection calcualation ---
+            bool isCorrect = false;
+
+            if (useNeighborhood) {
+                // Neighbor strategy 3x3 : if the pixel at (i,j) is contour,
+                // we verify if the pixel of reference is at least present in the neighborhood of 3x3.
+                for (int ni = std::max(0, i - 1); ni <= std::min(rows - 1, i + 1); ++ni) {
+                    for (int nj = std::max(0, j - 1); nj <= std::min(cols - 1, j + 1); ++nj) {
+                        if (referenceBinary.at<uchar>(ni, nj) > 0) {
+                            isCorrect = true;
+                            break;
+                        }
+                    }
+                    if (isCorrect) break;
+                }
+            } else {
+                // Exact position strategy
+                if (isDetected && referenceBinary.at<uchar>(i, j) > 0) {
+                    isCorrect = true;
+                }
+            }
+
+            if (isDetected && isCorrect) {
+                metrics.correct++;
+            }
+        }
+    }
+
+    // False positif / negatif calculus
+    // False positif = Detected - Correct
+    metrics.falsePositive = metrics.detected - metrics.correct;
+    // False negatif = Reference - Correct
+    metrics.falseNegative = metrics.reference - metrics.correct;
+
+    // 3 metrics calculus based on 3x3 neighboring
+    long long denominator = metrics.correct + metrics.falsePositive + metrics.falseNegative;
+
+    if (denominator > 0) {
+        metrics.P = (double)metrics.correct / denominator;
+        metrics.TFP = (double)metrics.falsePositive / denominator;
+        metrics.TFN = (double)metrics.falseNegative / denominator;
+    }
+
+    return metrics;
 }

@@ -7,54 +7,68 @@
 #include <colordetector.h>
 #include "histogram.h"
 
+
+
 std::string data_path = DATA_DIR;
-std::string img_name = "dark.png";
-std::string path = data_path + "/" + img_name;
+
+const std::string ORIG_DIR = std::string(DATA_DIR) + "/lot-orig";
+const std::string REF_DIR = std::string(DATA_DIR) + "/lot-manual-detected";
+
 
 int main() {
-    // Setup ============================
-    // data
+    // Data Setup ============================
     CallbackData data;
     data.origWin = "Original Image";
     data.dispWin = "Display Image";
-    data.resWin = "Result Image";
-    data.evalWin = "Evaluation Vue";
+    data.resWin = "Result Evaluation";
+    data.refWin = "Reference Image";
 
-    // loading image
-    cv::Mat img = loadImage(path);
-    img.copyTo(data.originalImg);
+    // loading batch images
+    data.batch = loadImageBatch(ORIG_DIR, REF_DIR);
+    if (data.batch.empty()) {
+        std::cerr << "Non image pairs loaded. End of the programme" << std::endl;
+        return 1;
+    }
+
+
+    // Initializing with the first image of the batch
+    data.batch[data.currentImageIndex].originalImage.copyTo(data.originalImg);
+    data.displayImg = data.batch[data.currentImageIndex].originalImage;
+    data.displayImg.copyTo(data.resultImg); // Initialising the result image
+
+
+    // Creating windows
+    cv::namedWindow(data.origWin); // Original image window
+    cv::namedWindow(data.dispWin); // Display image window (Alogrithme Contour detection)
+    cv::namedWindow(data.resWin, cv::WINDOW_FREERATIO); // Metrics windows
+    cv::namedWindow(data.refWin); // Reference image window (Manual Contour detected)
+
+
+    // Creating trackbars for Display window
+
+    // Trackbar 1 : Detector choice
+    cv::createTrackbar("Detector", data.dispWin, &data.detectorChoice, 2, onTrackbarChange, &data);
+    cv::setTrackbarMin("Detector", data.dispWin, 0); // Tags : 0: Sobel, 1: Laplace, 2: Canny
+
+    // Trackbar 2 : Parameters 1 (low threshold for Canny or kernel size for Sobel/Laplace)
+    cv::createTrackbar("Parameter 1 (Threshold/Ksize)", data.dispWin, &data.canny_threshold1, 500, onTrackbarChange, &data);
+
+    // Trackbar 3: Parameters 2 (high threshold for Canny)
+    cv::createTrackbar("Parameter 2 (high threshold for Canny)", data.dispWin, &data.canny_threshold2, 500, onTrackbarChange, &data);
+
+
+    // 5. Callbacks
+    cv::setMouseCallback(data.dispWin, onMouse, &data);
+
+
 
     // ============================================
     // processing =================================
     // ============================================
-    // The histogram object
-    Histogram1D h;
-
-    // Expanding gamma
-    cv::Mat expandedImg = computeRangeExpansion(img);
-
-    // Compute the histogram
-    cv::Mat histoOrig = h.getHistogram(img);
-    cv::Mat histoExpanded = h.getHistogram(expandedImg);
+    // First processing on initialised data
+    processAndEvaluate(&data);
 
 
-
-    // Display a histogram as an image
-    cv::namedWindow("Histogramme Original");
-    cv::imshow("Histogramme Original", h.getHistogramImage(img));
-
-    cv::namedWindow("Histogramme Etendu");
-    cv::imshow("Histogramme Etendu", h.getHistogramImage(expandedImg));
-
-
-    data.displayImg = expandedImg;
-    data.displayImg.copyTo(data.resultImg);
-    cv::namedWindow(data.dispWin);
-    // Callbacks ==================================
-    cv::setMouseCallback("Display Image", onMouse, &data);
-
-    showImage(data.origWin, data.originalImg);
-    showImage(data.dispWin, data.displayImg);
     waitDestroy(0);
     return 0;
 }

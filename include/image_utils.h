@@ -5,6 +5,21 @@
 #include <string>
 #include <vector>
 
+// Structure to store image pairs original/reference and paths
+struct ImagePair {
+    std::string originalPath;
+    std::string referencePath;
+    cv::Mat originalImage;
+    cv::Mat referenceImage;
+};
+
+// for complete image collection
+using ImageBatch = std::vector<ImagePair>;
+
+
+// loading a batch of images, returns the vector of structure pairs of original and reference images
+ImageBatch loadImageBatch(const std::string& origDir, const std::string& refDir);
+
 // loading an image
 // returns cv::Mat
 cv::Mat loadImage(const std::string &path, int flags = cv::IMREAD_COLOR);
