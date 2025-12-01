@@ -215,7 +215,6 @@ void detectHScolor(const cv::Mat& image,		// input image
 // Gamma expansion
 cv::Mat computeRangeExpansion(const cv::Mat& image) {
     cv::Mat grayImage;
-    // 1. Assurer que l'image est en niveaux de gris (1 canal)
     if (image.channels() == 3) {
         cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
     } else {
@@ -224,9 +223,6 @@ cv::Mat computeRangeExpansion(const cv::Mat& image) {
 
     cv::Mat expandedImage;
 
-    // 2. Effectuer l'expansion de gamme linéaire
-    // cv::NORM_MINMAX met à l'échelle les éléments pour que la valeur minimale
-    // soit mappée à 0 et la valeur maximale à 255.
     cv::normalize(grayImage, expandedImage, 0, 255, cv::NORM_MINMAX, CV_8U);
 
     return expandedImage;
@@ -234,55 +230,53 @@ cv::Mat computeRangeExpansion(const cv::Mat& image) {
 
 // Sobel Contour detection
 cv::Mat detectEdgesSobel(const cv::Mat& grayImage, int ksize) {
-    if (ksize % 2 == 0) ksize++; // ksize doit être impair
+    if (ksize % 2 == 0) ksize++; // ksize should be odd
     if (ksize < 3) ksize = 3;    // Minimum 3
 
     cv::Mat grad_x, grad_y, abs_grad_x, abs_grad_y;
     cv::Mat grad;
 
-    // Calcul du gradient x et y
-    // Utilisation de CV_16S pour éviter le débordement des entiers (16 bits signés)
+    // Calculating x and y gradients
     cv::Sobel(grayImage, grad_x, CV_16S, 1, 0, ksize);
     cv::Sobel(grayImage, grad_y, CV_16S, 0, 1, ksize);
 
-    // Conversion en valeurs absolues et en 8 bits (0-255)
-    cv::convertScaleAbs(grad_x, abs_grad_y); // Correction: abs_grad_y pour grad_y
-    cv::convertScaleAbs(grad_y, abs_grad_y); // Correction: abs_grad_y pour grad_y
+
+    cv::convertScaleAbs(grad_x, abs_grad_y);
+    cv::convertScaleAbs(grad_y, abs_grad_y);
     cv::convertScaleAbs(grad_x, abs_grad_x);
     cv::convertScaleAbs(grad_y, abs_grad_y);
 
-    // Combinaison des gradients (approximation de la magnitude)
+    // Combining gradients approximation
     cv::addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
 
-    // La binarisation est faite dans processAndEvaluate avec le seuil du trackbar
-    return grad; // Retourne l'image de gradient avant binarisation
+
+    return grad; // returns gradient image before binarisation
 }
 
 // Laplace Contour detection
 cv::Mat detectEdgesLaplace(const cv::Mat& grayImage, int ksize) {
-    if (ksize % 2 == 0) ksize++; // ksize doit être impair
-    if (ksize < 3) ksize = 3;    // Minimum 3
+    if (ksize % 2 == 0) ksize++; // ksize should be odd
+    if (ksize < 3) ksize = 3;    // Minimum of 3
 
     cv::Mat abs_dst, dst;
 
-    // Application de l'opérateur de Laplace (Second ordre)
+    // Applying operation
     cv::Laplacian(grayImage, dst, CV_16S, ksize);
 
-    // Conversion en valeurs absolues et en 8 bits (0-255)
+    // Conversion
     cv::convertScaleAbs(dst, abs_dst);
 
-    // La binarisation est faite dans processAndEvaluate avec le seuil du trackbar
-    return abs_dst; // Retourne l'image de gradient avant binarisation
+    return abs_dst; // Returning gradient image
 }
 
 // Canny Contour detection
 cv::Mat detectEdgesCanny(const cv::Mat& grayImage, double threshold1, double threshold2) {
     cv::Mat detectedEdges;
 
-    // L'opérateur Canny (détection de gradient, suppression des non-maxima et seuillage par hystérésis)
+    // Detects de gradient, deletes non-maxima and 'seuillage' hystérésis)
     cv::Canny(grayImage, detectedEdges, threshold1, threshold2, 3, true);
 
-    // Le résultat de Canny est déjà une image binaire 0/255.
+    // ther resulting is already a binary image
     return detectedEdges;
 }
 
@@ -322,6 +316,9 @@ void processAndEvaluate(CallbackData* data) {
         detectedEdges = detectEdgesCanny(grayImage, data->canny_threshold1, data->canny_threshold2);
     }
 
+    // Inverting
+    cv::bitwise_not(detectedEdges, detectedEdges);
+
     // Copying the result to the structure
     detectedEdges.copyTo(data->displayImg);
 
@@ -335,7 +332,7 @@ void processAndEvaluate(CallbackData* data) {
     showImage(data->refWin, data->referenceImg);
 
     // Showing metrics
-    cv::Mat metricsDisplay(400, 600, CV_8UC3, cv::Scalar(30, 30, 30));
+    cv::Mat metricsDisplay(900, 600, CV_8UC3, cv::Scalar(30, 30, 30));
     int y_offset = 30;
     int line_height = 30;
 
@@ -347,7 +344,7 @@ void processAndEvaluate(CallbackData* data) {
     std::string detectorName = (data->detectorChoice == DETECTOR_SOBEL) ? "Sobel" :
                                (data->detectorChoice == DETECTOR_LAPLACE) ? "Laplace" : "Canny";
     cv::putText(metricsDisplay, "Detector: " + detectorName, cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 200, 255), 2);
-    y_offset += line_height * 2;
+    y_offset += line_height * 4;
 
     // Five metrics
     cv::putText(metricsDisplay, "--- Base measurements ---", cv::Point(10, y_offset), cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 100, 100), 1);
@@ -377,7 +374,8 @@ void processAndEvaluate(CallbackData* data) {
     // Updating result Image
     metricsDisplay.copyTo(data->resultImg);
     // Showing result Image
-    cv::imshow(data->resWin, data->resultImg);
+    cv::resizeWindow(data->resWin, cv::Size(600, 900));
+    showImage(data->resWin, data->resultImg);
 }
 
 // Contour detection evaluation comared to a manually contour detected reference image
@@ -400,7 +398,7 @@ CallbackData::EvaluationMetrics evaluateContours(const cv::Mat& detectedImage, c
     // Counting total pixels of the reference
     metrics.reference = cv::countNonZero(referenceBinary);
 
-    // Iterating to calculate five measuremenets
+    // Iterating to calculate five measurements
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             bool isDetected = detectedBinary.at<uchar>(i, j) > 0;
