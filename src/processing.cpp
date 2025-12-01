@@ -324,7 +324,7 @@ void processAndEvaluate(CallbackData* data) {
 
     // Evaluation
     // Uses `data->displayImg` (detected contours) and `currentPair.referenceImage` (manual contours)
-    data->currentMetrics = evaluateContours(data->displayImg, data->referenceImg, true);
+    data->currentMetrics = evaluateContours(data->displayImg, data->referenceImg, false);
 
     // Showing images
     showImage(data->origWin, data->originalImg);
